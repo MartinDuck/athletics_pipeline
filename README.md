@@ -24,7 +24,7 @@ The scraper specifically extracts top 8 results from chosen competition groups. 
 ### Stage 1: Website Analysis & Setup
 Before writing the extraction logic, I analyzed the DOM structure of the World Athletics (WA) website to identify how their internal APIs and URL parameters functioned. I discovered that competitions are categorized by internal Group IDs. I mapped these into a configuration dictionary to drive the automated scraping loop.
 
-# Configuration dictionary mapping major championships to their WA Group IDs
+### Configuration dictionary mapping major championships to their WA Group IDs
 COMPETITION_GROUPS = {
     "Olympic Games": 5,
     "World Athletics Championships": 6,
