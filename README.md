@@ -24,13 +24,13 @@ The scraper specifically extracts top 8 results from chosen competition groups. 
 ### Stage 1: Website Analysis & Setup
 Before writing the extraction logic, I analyzed the DOM structure of the World Athletics (WA) website to identify how their internal APIs and URL parameters functioned. I discovered that competitions are categorized by internal Group IDs. I mapped these into a configuration dictionary to drive the automated scraping loop.
 
-'''
+```
 COMPETITION_GROUPS = {
     "Olympic Games": 5,
     "World Athletics Championships": 6,
     "World Athletics Indoor Championships": 12
 }
-'''
+```
 
 ### Stage 2: Building the Dimension Table (dim_competitions)
 The first phase of the ELT process focuses on extracting metadata for every finished competition within the target groups.
