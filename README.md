@@ -5,6 +5,13 @@
 ![BigQuery](https://img.shields.io/badge/BigQuery-669DF6?style=for-the-badge&logo=google-bigquery&logoColor=white)
 ![Looker Studio](https://img.shields.io/badge/Looker_Studio-4285F4?style=for-the-badge&logo=looker&logoColor=white)
 
+
+
+## The Final Product
+**[Click here to view the live Looker Studio Dashboard](https://lookerstudio.google.com/reporting/8ee43461-48fc-46d7-a9e6-3fdf5a065190)**
+
+![Dashboard Screenshot](./assets/dashboard.png)
+
 ## Project Overview
 This project is an end-to-end **Cloud Data Engineering** pipeline designed to extract, transform, and visualize track and field results from the World Athletics website.
 
@@ -43,3 +50,8 @@ The first phase of the ELT process focuses on extracting metadata for every fini
 2. **Dynamic Event Parsing:** For each competition it requests the specific WA results URL, parses the HTML `<select>` dropdown menu and extracts every Competition_ID
 3. **Granular Extraction:** It iterates through every event, scraping the Top 8 results.
 4. **Handling Edge Cases and initial transformations:** If the script detects a "Relay" event, it explodes the concatenated string of athletes into four distinct rows to ensure accurate medal counts per athlete in the downstream dashboard. It also strips '.' out of 'Place' column to ensure safe INT parsing and converts birth date format to YYYY-MM-DD.
+
+### Stage 4: The Data Warehouse Transformation (The "Gold" Layer)
+To optimize the data for Looker Studio, I created a final SQL View (`gold_results_dashboard`) that acts as the serving layer.
+* **Regex Date Parsing:** The competition dates were stored as messy strings (e.g., `30 JUL-08 AUG 2021`). I used `REGEXP_EXTRACT` to isolate the final date and parsed it into a true `DATE` type to calculate the athlete's exact age on the day of the result.
+* **Polymorphic Data Handling:** The `Mark` column contained race times, jump distances, and status codes (DQ, DNS, DNF). I used a `CASE` statement to split this into a `Clean_Mark` column and a `Result_Status` column, allowing the BI dashboard to filter out disqualified athletes without crashing.
