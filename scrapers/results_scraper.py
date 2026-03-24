@@ -92,7 +92,7 @@ def scrape_event(session: requests.Session, base_url: str, comp_id: str, event_i
                 if raw_dob:
                     try:
                         parsed_date = datetime.strptime(raw_dob, "%d %b %Y")  #Parse date in format "DD MMM YYYY"
-                        clean_dob = parsed_date.strftime("%Y-%m-%d")           
+                        clean_dob = parsed_date.strftime("%Y-%m-%d")          #Convert to ISO format "YYYY-MM-DD"
                     except ValueError:
                         clean_dob = None
 
@@ -108,11 +108,14 @@ def scrape_event(session: requests.Session, base_url: str, comp_id: str, event_i
                 }
 
                 if 'relay' in event_name.lower(): #Split relay results into individual records for each athlete
-                    names = cells[1].text.strip().split(',')
+                    athlete_links = cells[1].find_all('a') #Only look for athlete link in relay events, because these cells contain country names.
+                    
+                    if athlete_links:
+                        for link in athlete_links:
+                            clean_name = link.text.strip(', ') 
+                            row_dict["Athlete_Name"] = clean_name
+                            scraped_data.append(row_dict.copy())
 
-                    for name in names:
-                        row_dict["Athlete_Name"] = name.strip()
-                        scraped_data.append(row_dict.copy())
                 else:
                     row_dict["Athlete_Name"] = cells[1].text.strip()
                     scraped_data.append(row_dict)

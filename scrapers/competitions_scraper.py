@@ -55,15 +55,16 @@ def get_competition_ids(url: str) -> list:
         if link:
             href = link.get('href')
             id = re.search(r'\d+', href)
-            columns = row.find_all('td')[:3]
+            columns = row.find_all('td')[:3] 
+
             if len(columns) == 3 and id:
 
-                competition_date = columns[0].get_text(strip=True).replace('–', '-')
+                competition_date = columns[0].get_text(strip=True).replace('–', '-') # Standardize date format by replacing en dash with hyphen
 
                 competition_name = columns[1].get_text(strip=True)
 
                 competition_location = columns[2].get_text(strip=True)
-                location_split = re.search(r"^(.*)\s\(([A-Z]{3})\)$", competition_location)
+                location_split = re.search(r"^(.*)\s\(([A-Z]{3})\)$", competition_location) # Attempt to split location into venue and country code
         
                 competition_venue = competition_location
                 competition_country = None
