@@ -40,13 +40,6 @@ The first phase of the ELT process focuses on extracting metadata for every fini
 
 ### Stage 3: The Cloud-Native Results Scraper (fact_results)
 1. **Querying the Cloud:** The script connects to BigQuery and runs a SELECT statement to fetch the Competition_IDs loaded in Stage 2.
-2. **Dynamic Event Parsing:** For each competition, it requests the specific WA results URL, parses the HTML <select> dropdown menu, and extracts every Event_ID (eg., 100m, Long Jump).
+2. **Dynamic Event Parsing:** For each competition it requests the specific WA results URL, parses the HTML `<select>` dropdown menu and extracts every Competition_ID
 3. **Granular Extraction:** It iterates through every event, scraping the Top 8 results.
 4. **Handling Edge Cases and initial transformations:** If the script detects a "Relay" event, it explodes the concatenated string of athletes into four distinct rows to ensure accurate medal counts per athlete in the downstream dashboard. It also strips '.' out of 'Place' column to ensure safe INT parsing and converts birth date format to YYYY-MM-DD.
-
-### The ELT Pipeline Flow:
-1. **Extract:** A Python scraper dynamically extracts hierarchical competition and event data.
-2. **Load :** Semi-structured data is streamed directly into BigQuery using `Application Default Credentials`. To ensure fault tolerance and prevent pipeline crashes, polymorphic fields (like finishing marks and varying date formats) are ingested as raw `STRING` types.
-3. **Transform:** * Python logic explodes concatenated "Relay Team" strings into individual athlete rows.
-    * BigQuery SQL is used to enforce data types, handle NULLs, and model the data into a Star Schema.
-4. **Serve:** Looker Studio connects directly to the BigQuery tables to serve interactive analytics.
