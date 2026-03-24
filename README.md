@@ -5,6 +5,13 @@
 ![BigQuery](https://img.shields.io/badge/BigQuery-669DF6?style=for-the-badge&logo=google-bigquery&logoColor=white)
 ![Looker Studio](https://img.shields.io/badge/Looker_Studio-4285F4?style=for-the-badge&logo=looker&logoColor=white)
 
+
+
+## The Final Product
+**[Click here to view the live Looker Studio Dashboard](https://lookerstudio.google.com/reporting/8ee43461-48fc-46d7-a9e6-3fdf5a065190)**
+
+![Dashboard Screenshot](./assets/dashboard.png)
+
 ## Project Overview
 This project is an end-to-end **Cloud Data Engineering** pipeline designed to extract, transform, and visualize track and field results from the World Athletics website.
 
@@ -24,12 +31,13 @@ The scraper specifically extracts top 8 results from chosen competition groups. 
 ### Stage 1: Website Analysis & Setup
 Before writing the extraction logic, I analyzed the DOM structure of the World Athletics (WA) website to identify how their internal APIs and URL parameters functioned. I discovered that competitions are categorized by internal Group IDs. I mapped these into a configuration dictionary to drive the automated scraping loop.
 
-### Configuration dictionary mapping major championships to their WA Group IDs
+```
 COMPETITION_GROUPS = {
     "Olympic Games": 5,
     "World Athletics Championships": 6,
     "World Athletics Indoor Championships": 12
 }
+```
 
 ### Stage 2: Building the Dimension Table (dim_competitions)
 The first phase of the ELT process focuses on extracting metadata for every finished competition within the target groups.
@@ -39,13 +47,11 @@ The first phase of the ELT process focuses on extracting metadata for every fini
 
 ### Stage 3: The Cloud-Native Results Scraper (fact_results)
 1. **Querying the Cloud:** The script connects to BigQuery and runs a SELECT statement to fetch the Competition_IDs loaded in Stage 2.
-2. **Dynamic Event Parsing:** For each competition, it requests the specific WA results URL, parses the HTML <select> dropdown menu, and extracts every Event_ID (eg., 100m, Long Jump).
+2. **Dynamic Event Parsing:** For each competition it requests the specific WA results URL, parses the HTML `<select>` dropdown menu and extracts every Competition_ID
 3. **Granular Extraction:** It iterates through every event, scraping the Top 8 results.
 4. **Handling Edge Cases and initial transformations:** If the script detects a "Relay" event, it explodes the concatenated string of athletes into four distinct rows to ensure accurate medal counts per athlete in the downstream dashboard. It also strips '.' out of 'Place' column to ensure safe INT parsing and converts birth date format to YYYY-MM-DD.
 
-### The ELT Pipeline Flow:
-1. **Extract:** A Python scraper dynamically extracts hierarchical competition and event data.
-2. **Load :** Semi-structured data is streamed directly into BigQuery using `Application Default Credentials`. To ensure fault tolerance and prevent pipeline crashes, polymorphic fields (like finishing marks and varying date formats) are ingested as raw `STRING` types.
-3. **Transform:** * Python logic explodes concatenated "Relay Team" strings into individual athlete rows.
-    * BigQuery SQL is used to enforce data types, handle NULLs, and model the data into a Star Schema.
-4. **Serve:** Looker Studio connects directly to the BigQuery tables to serve interactive analytics.
+### Stage 4: The Data Warehouse Transformation (The "Gold" Layer)
+To optimize the data for Looker Studio, I created a final SQL View (`gold_results_dashboard`) that acts as the serving layer.
+* **Regex Date Parsing:** The competition dates were stored as messy strings (e.g., `30 JUL-08 AUG 2021`). I used `REGEXP_EXTRACT` to isolate the final date and parsed it into a true `DATE` type to calculate the athlete's exact age on the day of the result.
+* **Polymorphic Data Handling:** The `Mark` column contained race times, jump distances, and status codes (DQ, DNS, DNF). I used a `CASE` statement to split this into a `Clean_Mark` column and a `Result_Status` column, allowing the BI dashboard to filter out disqualified athletes without crashing.
