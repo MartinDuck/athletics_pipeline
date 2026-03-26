@@ -55,3 +55,21 @@ The first phase of the ELT process focuses on extracting metadata for every fini
 To optimize the data for Looker Studio, I created a final SQL View (`gold_results_dashboard`) that acts as the serving layer.
 * **Regex Date Parsing:** The competition dates were stored as messy strings (e.g., `30 JUL-08 AUG 2021`). I used `REGEXP_EXTRACT` to isolate the final date and parsed it into a true `DATE` type to calculate the athlete's exact age on the day of the result.
 * **Polymorphic Data Handling:** The `Mark` column contained race times, jump distances, and status codes (DQ, DNS, DNF). I used a `CASE` statement to split this into a `Clean_Mark` column and a `Result_Status` column, allowing the BI dashboard to filter out disqualified athletes without crashing.
+
+## How to run locally
+
+1. Install dependencies:
+``` pip install -r requirements.txt ```
+2. Set up GC credentials:
+```gcloud auth application-default login```
+3. Create a .env file in the root directory:
+```
+PROJECT_ID="your-gcp-project-id"
+COMPETITIONS_TABLE="your-project.dataset.dim_competitions"
+RESULTS_TABLE="your-project.dataset.fact_results"
+```
+4. Execute competitions pipeline:
+``` python scrapers\competitions_scraper.py ```
+5. Execute results pipeline:
+``` python scrapers\results_scraper.py```
+
