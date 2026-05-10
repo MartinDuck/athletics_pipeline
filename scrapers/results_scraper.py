@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 from dotenv import load_dotenv
 import os
+import pandas as pd 
 
 load_dotenv()
 
@@ -16,12 +17,10 @@ def get_competition_ids(client: bigquery.Client) -> list[dict[str, str]]:
     """
     Fetch competition IDs and names from the BigQuery table.
     """
-
     query = f"""
         SELECT Competition_ID, Competition_Name
         FROM `{os.getenv('COMPETITIONS_TABLE')}`
     """
-
     try:
         query_job = client.query(query)
     except Exception as e:
@@ -41,7 +40,6 @@ def scrape_event_ids(competition_id: str) -> dict[str, str]:
     """
     Fetch event IDs and names for a given competition ID 
     """
-
     url = f'https://worldathletics.org/competition/calendar-results/results/{competition_id}?eventId='
     events = {}
     
@@ -63,12 +61,11 @@ def scrape_event_ids(competition_id: str) -> dict[str, str]:
     
     return events
 
-def scrape_event(session: requests.Session, base_url: str, comp_id: str, event_id: str, event_name: str) -> list:
 
+def scrape_event(session: requests.Session, base_url: str, comp_id: str, event_id: str, event_name: str) -> list[dict[str, str]]:
     """
     Scrape event results for a given event ID and return a list of dictionaries with the data.
     """
-
     event_url = f"{base_url}?eventId={event_id}"
     scraped_data = []
     
@@ -77,22 +74,23 @@ def scrape_event(session: requests.Session, base_url: str, comp_id: str, event_i
         response.raise_for_status() 
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        rows = soup.find_all('tr', attrs={'role': 'row'}, limit=9) #Header + top 8 results
+        rows = soup.find_all('tr', attrs={'role': 'row'}, limit=9) # Header + top 8 results
         
-        for row in rows[1:]: #Skip header row
+        for row in rows[1:]: # Skip header row
             cells = row.find_all('td')
             if len(cells) >= 5:
 
-                Place = cells[0].text.strip('. ') #Remove trailing dot and spaces from place
+                Place = cells[0].text.strip('. ') # Remove trailing dot and spaces from place
                 if Place == '-':
                     Place = None
 
                 raw_dob = cells[2].text.strip()
+                clean_dob = None
 
                 if raw_dob:
                     try:
-                        parsed_date = datetime.strptime(raw_dob, "%d %b %Y")  #Parse date in format "DD MMM YYYY"
-                        clean_dob = parsed_date.strftime("%Y-%m-%d")          #Convert to ISO format "YYYY-MM-DD"
+                        parsed_date = datetime.strptime(raw_dob, "%d %b %Y")  # Parse date in format "DD MMM YYYY"
+                        clean_dob = parsed_date.strftime("%Y-%m-%d")          # Convert to ISO format "YYYY-MM-DD"
                     except ValueError:
                         clean_dob = None
 
@@ -107,8 +105,8 @@ def scrape_event(session: requests.Session, base_url: str, comp_id: str, event_i
                     "Mark": cells[4].text.strip()
                 }
 
-                if 'relay' in event_name.lower(): #Split relay results into individual records for each athlete
-                    athlete_links = cells[1].find_all('a') #Only look for athlete link in relay events, because these cells contain country names.
+                if 'relay' in event_name.lower(): # Split relay results into individual records for each athlete
+                    athlete_links = cells[1].find_all('a') 
                     
                     if athlete_links:
                         for link in athlete_links:
@@ -127,30 +125,21 @@ def scrape_event(session: requests.Session, base_url: str, comp_id: str, event_i
         
     return scraped_data
 
-def main():
-    logging.info("Starting World Athletics to BigQuery Pipeline...")
-    
-    project_id = os.getenv("PROJECT_ID")
-    client = bigquery.Client(project=project_id)
-    
-    table_id = os.getenv("RESULTS_TABLE")
-    
-    comp_ids = get_competition_ids(client)
 
-    event_ids = []
+def extract_all_events(comp_ids: list[dict[str, str]]) -> list[dict]:
+    """Handles the session setup and loops through competitions to extract raw data."""
+    all_events_data = []
     
-    if not comp_ids:
-        logging.error("Missing competition IDs. Exiting.")
-        return
-
     with requests.Session() as session:
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0'
+        })
+
         for comp in comp_ids:
             comp_id = comp["id"]
-
-            comp_name = comp["name"]
             base_url = f'https://worldathletics.org/competition/calendar-results/results/{comp_id}'
             
-            logging.info(f"Processing competition: {comp_name}")
+            logging.info(f"Processing competition: {comp['name']}")
             
             event_ids = scrape_event_ids(comp_id)
             for event_id, event_name in event_ids.items():
@@ -158,14 +147,63 @@ def main():
                 event_data = scrape_event(session, base_url, comp_id, event_id, event_name)
             
                 if event_data:
-                    errors = client.insert_rows_json(table_id, event_data)
-                    if errors == []:
-                        logging.info(f"Successfully loaded {len(event_data)} rows..")
-                    else:
-                        logging.error(f"Failed to load rows: {errors}")
+                    all_events_data.extend(event_data)
+            
+                time.sleep(0.5)
                 
-                time.sleep(0.5) 
-                    
+    return all_events_data
+
+
+def transform_to_dataframe(raw_data: list[dict]) -> pd.DataFrame:
+    """Converts raw list of dictionaries to a DataFrame and cleans it."""
+    logging.info("Transforming raw data...")
+    df = pd.DataFrame(raw_data)
+    
+    initial_count = len(df)
+    df.drop_duplicates(inplace=True)
+    
+    if len(df) < initial_count:
+        logging.info(f"Dropped {initial_count - len(df)} duplicate rows.")
+        
+    return df
+
+def load_to_bigquery(client: bigquery.Client, df: pd.DataFrame, table_id: str) -> None:
+    """Executes a batch load job to BigQuery."""
+    logging.info(f"Initiating BigQuery Load Job for {len(df)} rows to {table_id}...")
+    
+    job_config = bigquery.LoadJobConfig(
+        write_disposition="WRITE_APPEND", 
+    )
+
+    try:
+        job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
+        job.result()  
+        logging.info("Load job completed successfully.")
+    except Exception as e:
+        logging.error(f"Failed to load DataFrame to BigQuery: {e}")
+
+def main():
+    logging.info("Starting World Athletics to BigQuery Pipeline...")
+    
+    project_id = os.getenv("PROJECT_ID")
+    table_id = os.getenv("RESULTS_TABLE")
+    client = bigquery.Client(project=project_id)
+    
+    comp_ids = get_competition_ids(client)
+    if not comp_ids:
+        logging.error("Missing competition IDs. Exiting.")
+        return
+
+    raw_data = extract_all_events(comp_ids)
+    
+    if not raw_data:
+        logging.warning("No data scraped. Pipeline stopping.")
+        return
+
+    clean_df = transform_to_dataframe(raw_data)
+    
+    load_to_bigquery(client, clean_df, table_id)
+                
     logging.info("Pipeline finished successfully.")
 
 if __name__ == "__main__":
